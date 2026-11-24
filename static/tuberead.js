@@ -63,6 +63,16 @@ function paintSource() {
   ctx.strokeRect(cfg.left, cfg.upper, cfg.right - cfg.left, cfg.lower - cfg.upper);
   ctx.setLineDash([]);
   const drawn = state.result.reading;
+  const tint = state.result.transmittance;
+  if (tint) {
+    ctx.fillStyle = "rgba(37,104,109,0.23)";
+    ctx.strokeStyle = "#25686d";
+    ctx.lineWidth = 1.5;
+    for (const [y0, y1] of [tint.above_band, tint.below_band]) {
+      ctx.fillRect(tint.x0, y0, tint.x1 - tint.x0 + 1, y1 - y0 + 1);
+      ctx.strokeRect(tint.x0 + 0.5, y0 + 0.5, tint.x1 - tint.x0, y1 - y0);
+    }
+  }
   ctx.strokeStyle = "#ac5317";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -123,7 +133,30 @@ function paintChart() {
 
 function pointLabel(point) {
   const value = point.volume_ml === null ? "参考外" : point.volume_ml.toFixed(2) + " mL";
-  return "(" + point.x + ", " + point.y + ") · " + point.brightness.toFixed(1) + " · " + value;
+  let label = "(" + point.x + ", " + point.y + ") · " + point.brightness.toFixed(1) + " · " + value;
+  const t = point.transmittance;
+  if (t) {
+    label += " · 透色 R/G/B " + t.ratio_rgb.map((v) => v.toFixed(3)).join(" / ");
+  }
+  return label;
+}
+
+function renderTransmission(info) {
+  const panel = get("transmission");
+  if (!info) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  get("transmission-range").textContent = "采用列 X " + info.x0 + "–" + info.x1 +
+    " · " + info.columns.length + " 列";
+  get("transmission-bands").textContent = "水上 Y " + info.above_band[0] + "–" + info.above_band[1] +
+    " · 水下 Y " + info.below_band[0] + "–" + info.below_band[1];
+  const rgb = info.representative_rgb;
+  get("transmission-ratio").textContent = rgb.map((v) => v.toFixed(4)).join(" / ");
+  get("transmission-stability").textContent = "段内 CV " + info.stability_cv.toFixed(4);
+  const swatch = get("transmission-swatch");
+  swatch.style.background = "rgb(" + rgb.map((v) => Math.round(Math.min(v, 1) * 255)).join(",") + ")";
 }
 
 function show() {
@@ -145,6 +178,7 @@ function show() {
   get("volume-detail").textContent = volume === null ? "参考刻度外" : "mL";
   get("measurement-state").textContent = volume === null ? "超出范围" : "两点标定";
   get("selected-level").textContent = "原片液面 Y " + result.reading.y + " · " + result.ml_per_px.toFixed(3) + " mL/px";
+  renderTransmission(result.transmittance);
   for (const [id, filename] of Object.entries({proof: "proof.png", csv: "profile.csv", zip: "observation.zip"})) {
     get(id).href = "/tuberead" + route("/export/" + filename) + savedQuery();
   }

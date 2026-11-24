@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 
 from image_lab.validation import Invalid, integer, number
 
+from . import transmittance
 
 LUMA = np.array([0.2126, 0.7152, 0.0722])
 MAX_IMAGE_BYTES = 18 * 1024 * 1024
@@ -80,7 +81,14 @@ def report(image, config):
     x = (config["left"] + config["right"]) // 2
     profile = [sample(image, column, y, config) for column in range(config["left"], config["right"] + 1)]
     return {"reading": sample(image, x, y, config), "profile": profile,
-            "ml_per_px": (config["high_ml"] - config["low_ml"]) / (config["lower"] - config["upper"])}
+            "ml_per_px": (config["high_ml"] - config["low_ml"]) / (config["lower"] - config["upper"]),
+            "transmittance": transmittance.analyze(image, config)}
+
+
+def probe(image, x, y, config):
+    result = sample(image, x, y, config)
+    result["transmittance"] = transmittance.at_column(transmittance.analyze(image, config), x)
+    return result
 
 
 def practice():

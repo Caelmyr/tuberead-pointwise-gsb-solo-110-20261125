@@ -62,6 +62,18 @@
         <div class="volume"><strong id="volume">—</strong><span id="volume-detail"></span></div>
         <p id="selected-level"></p>
       </section>
+      <section id="transmission" class="panel transmission" hidden>
+        <div class="panel-head"><h2>相对透色对照</h2><span>同列水下 ÷ 水上 · 线性 RGB</span></div>
+        <div class="transmission-body">
+          <div class="transmission-swatch" id="transmission-swatch" aria-hidden="true"></div>
+          <div>
+            <p id="transmission-range"></p>
+            <p id="transmission-bands"></p>
+            <p>代表色比 <b id="transmission-ratio"></b></p>
+            <p id="transmission-stability"></p>
+          </div>
+        </div>
+      </section>
       <form id="calibration" class="panel settings">
         <div class="panel-head"><div><h2>刻度与液位</h2><span>Y 从原片顶部向下增加</span></div></div>
         <label class="wide">卡片名称<input id="name" maxlength="80" required></label>

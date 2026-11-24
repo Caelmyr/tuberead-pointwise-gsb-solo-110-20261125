@@ -73,7 +73,7 @@ def create_app(directory=None):
         card = cards.read(key, request.args.get("revision"))
         x = integer(request.args.get("x"), "X", 0, card["width"] - 1)
         y = integer(request.args.get("y"), "Y", 0, card["height"] - 1)
-        return jsonify(scale.sample(scale.pixels(cards.photo(key)), x, y, card["settings"]))
+        return jsonify(scale.probe(scale.pixels(cards.photo(key)), x, y, card["settings"]))
 
     @api.get("/cards/<key>/export/profile.csv")
     def profile(key):
