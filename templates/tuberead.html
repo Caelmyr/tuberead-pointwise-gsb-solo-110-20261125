@@ -65,10 +65,16 @@
       <form id="calibration" class="panel settings">
         <div class="panel-head"><div><h2>刻度与液位</h2><span>Y 从原片顶部向下增加</span></div></div>
         <label class="wide">卡片名称<input id="name" maxlength="80" required></label>
+        <label class="wide">读数方式
+          <select data-setting="method">
+            <option value="manual">手填液位</option>
+            <option value="meniscus">凹液面跟边</option>
+          </select>
+        </label>
         <fieldset><legend>原片坐标 · px</legend><div class="form-grid">
           <label>左壁 X<input data-setting="left" type="number" step="1" min="0" required></label>
           <label>右壁 X<input data-setting="right" type="number" step="1" min="0" required></label>
-          <label>液面 Y<input data-setting="level" type="number" step="1" min="0" required></label>
+          <label>手填液面 Y<input data-setting="level" type="number" step="1" min="0" required></label>
           <label>上刻度 Y<input data-setting="upper" type="number" step="1" min="0" required></label>
           <label>下刻度 Y<input data-setting="lower" type="number" step="1" min="0" required></label>
         </div></fieldset>

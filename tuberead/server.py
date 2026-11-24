@@ -77,8 +77,9 @@ def create_app(directory=None):
 
     @api.get("/cards/<key>/export/profile.csv")
     def profile(key):
-        _, _, result = measurement(key)
-        return download(exports.trace_table(result), "text/csv", "waterline-profile.csv")
+        card, image, result = measurement(key)
+        name = "meniscus-trace.csv" if result.get("meniscus") else "waterline-profile.csv"
+        return download(exports.trace_table(result, image, card["settings"]), "text/csv", name)
 
     @api.get("/cards/<key>/export/proof.png")
     def proof(key):

@@ -51,7 +51,7 @@ async function library() {
 function paintSource() {
   const canvas = get("capture");
   const ctx = canvas.getContext("2d");
-  const {photo, card, probe} = state;
+  const {photo, card, probe, result} = state;
   if (!photo) return;
   canvas.width = card.width;
   canvas.height = card.height;
@@ -62,17 +62,45 @@ function paintSource() {
   ctx.setLineDash([6, 4]);
   ctx.strokeRect(cfg.left, cfg.upper, cfg.right - cfg.left, cfg.lower - cfg.upper);
   ctx.setLineDash([]);
-  const drawn = state.result.reading;
-  ctx.strokeStyle = "#ac5317";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(cfg.left, drawn.y);
-  ctx.lineTo(cfg.right, drawn.y);
-  ctx.stroke();
-  ctx.fillStyle = "#ac5317";
-  ctx.beginPath();
-  ctx.arc(drawn.x, drawn.y, 4, 0, 2 * Math.PI);
-  ctx.fill();
+  const drawn = result.reading;
+  const meniscus = result.meniscus;
+  if (meniscus) {
+    const region = meniscus.region;
+    ctx.strokeStyle = "rgba(40, 114, 124, .55)";
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.moveTo(region.xa + 0.5, region.upper);
+    ctx.lineTo(region.xa + 0.5, region.lower);
+    ctx.moveTo(region.xb + 0.5, region.upper);
+    ctx.lineTo(region.xb + 0.5, region.lower);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineWidth = 2;
+    for (let i = 1; i < meniscus.path.length; i++) {
+      const [x0, y0, seen0] = meniscus.path[i - 1];
+      const [x1, y1, seen1] = meniscus.path[i];
+      ctx.strokeStyle = seen0 && seen1 ? "#1d7a4f" : "#c07a1a";
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+    }
+    ctx.fillStyle = meniscus.seen ? "#1d7a4f" : "#c07a1a";
+    ctx.beginPath();
+    ctx.arc(drawn.x, drawn.y, 4, 0, 2 * Math.PI);
+    ctx.fill();
+  } else if (result.method !== "meniscus") {
+    ctx.strokeStyle = "#ac5317";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cfg.left, drawn.y);
+    ctx.lineTo(cfg.right, drawn.y);
+    ctx.stroke();
+    ctx.fillStyle = "#ac5317";
+    ctx.beginPath();
+    ctx.arc(drawn.x, drawn.y, 4, 0, 2 * Math.PI);
+    ctx.fill();
+  }
   if (probe) {
     ctx.strokeStyle = "#132637";
     ctx.strokeRect(probe.x - 5, probe.y - 5, 10, 10);
@@ -134,17 +162,42 @@ function show() {
   get("card-title").textContent = card.name;
   get("dimensions").textContent = card.width + " × " + card.height + " px · " + card.photo_name;
   get("name").value = card.name;
-  for (const field of settings) field.value = card.settings[field.dataset.setting];
+  for (const field of settings) {
+    const value = card.settings[field.dataset.setting];
+    field.value = value ?? (field.dataset.setting === "method" ? "manual" : "");
+  }
   get("probe-x").max = card.width - 1;
   get("probe-y").max = card.height - 1;
   get("probe-x").value = state.probe?.x ?? result.reading.x;
   get("probe-y").value = state.probe?.y ?? result.reading.y;
   get("probe-result").textContent = state.probe ? pointLabel(state.probe) : "选择原片像素";
   const volume = result.reading.volume_ml;
-  get("volume").textContent = volume === null ? "—" : volume.toFixed(2);
-  get("volume-detail").textContent = volume === null ? "参考刻度外" : "mL";
-  get("measurement-state").textContent = volume === null ? "超出范围" : "两点标定";
-  get("selected-level").textContent = "原片液面 Y " + result.reading.y + " · " + result.ml_per_px.toFixed(3) + " mL/px";
+  const interval = result.interval;
+  const scale = result.ml_per_px.toFixed(3) + " mL/px";
+  if (result.issue) {
+    get("volume").textContent = "—";
+    get("volume-detail").textContent = "需要重选";
+    get("measurement-state").textContent = "凹液面跟边 · 未采用";
+    get("selected-level").textContent = result.issue;
+    notice(result.issue);
+  } else if (interval) {
+    get("volume").textContent = interval.low_ml.toFixed(2) + "–" + interval.high_ml.toFixed(2);
+    get("volume-detail").textContent = "mL · 区间";
+    get("measurement-state").textContent = "凹液面跟边 · 最低处补缺口";
+    get("selected-level").textContent = "凹液面最低落在补过的短缺口 · 可支持最低 Y " +
+      interval.y_shallow + "–" + interval.y_deep + " · " + scale;
+  } else if (result.meniscus) {
+    get("volume").textContent = volume.toFixed(2);
+    get("volume-detail").textContent = "mL";
+    get("measurement-state").textContent = "凹液面跟边 · 实见最低";
+    get("selected-level").textContent = "凹液面最低 (" + result.reading.x + ", " + result.reading.y +
+      ") · 实见 · " + scale;
+  } else {
+    get("volume").textContent = volume === null ? "—" : volume.toFixed(2);
+    get("volume-detail").textContent = volume === null ? "参考刻度外" : "mL";
+    get("measurement-state").textContent = volume === null ? "超出范围" : "两点标定";
+    get("selected-level").textContent = "原片液面 Y " + result.reading.y + " · " + scale;
+  }
   for (const [id, filename] of Object.entries({proof: "proof.png", csv: "profile.csv", zip: "observation.zip"})) {
     get(id).href = "/tuberead" + route("/export/" + filename) + savedQuery();
   }
@@ -219,7 +272,10 @@ get("probe-form").addEventListener("submit", (event) => {
 get("calibration").addEventListener("submit", (event) => {
   event.preventDefault();
   action(async () => {
-    const fields = Object.fromEntries(settings.map((field) => [field.dataset.setting, Number(field.value)]));
+    const fields = {};
+    for (const field of settings) {
+      fields[field.dataset.setting] = field.dataset.setting === "method" ? field.value : Number(field.value);
+    }
     const card = await api(route(""), {
       method: "PATCH", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({revision: state.card.revision, name: get("name").value, settings: fields}),

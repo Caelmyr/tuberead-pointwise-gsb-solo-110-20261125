@@ -6,7 +6,7 @@ import math
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 
-from image_lab.validation import Invalid, integer, number
+from image_lab.validation import Invalid, choice, integer, number
 
 
 LUMA = np.array([0.2126, 0.7152, 0.0722])
@@ -52,6 +52,7 @@ def settings(value, size):
         "upper": upper, "lower": integer(value.get("lower"), "下参考刻线 Y", upper + 2, h - 1),
         "high_ml": high_ml, "low_ml": low_ml,
         "level": integer(value.get("level"), "液面 Y", 0, h - 1),
+        "method": choice(value.get("method", "manual"), "读数方式", ("manual", "meniscus")),
     }
 
 
@@ -76,11 +77,17 @@ def sample(image, x, y, config):
 
 
 def report(image, config):
-    y = config["level"]
-    x = (config["left"] + config["right"]) // 2
-    profile = [sample(image, column, y, config) for column in range(config["left"], config["right"] + 1)]
-    return {"reading": sample(image, x, y, config), "profile": profile,
-            "ml_per_px": (config["high_ml"] - config["low_ml"]) / (config["lower"] - config["upper"])}
+    if config.get("method") == "meniscus":
+        from . import meniscus
+        result = meniscus.report(image, config)
+    else:
+        y = config["level"]
+        x = (config["left"] + config["right"]) // 2
+        profile = [sample(image, column, y, config) for column in range(config["left"], config["right"] + 1)]
+        result = {"method": "manual", "issue": None, "interval": None, "meniscus": None,
+                  "reading": sample(image, x, y, config), "profile": profile}
+    result["ml_per_px"] = (config["high_ml"] - config["low_ml"]) / (config["lower"] - config["upper"])
+    return result
 
 
 def practice():
