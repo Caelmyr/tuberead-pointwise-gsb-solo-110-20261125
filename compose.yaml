@@ -1,0 +1,16 @@
+name: solo113-tuberead
+services:
+  desk:
+    build:
+      context: .
+      args:
+        TUBEREAD_DEPS_IMAGE: ${TUBEREAD_DEPS_IMAGE:-python:3.11-slim}
+    image: ${TUBEREAD_IMAGE:-solo113-tuberead:1.0}
+    network_mode: bridge
+    ports:
+      - "127.0.0.1:${TUBEREAD_PORT:-19913}:8000"
+    volumes:
+      - measurements:/var/lib/tuberead
+    init: true
+volumes:
+  measurements:

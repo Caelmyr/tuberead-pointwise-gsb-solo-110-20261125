@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TubeRead · 量筒读数台</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='tuberead.css') }}">
+  <script defer src="{{ url_for('static', filename='tuberead.js') }}"></script>
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="/"><i aria-hidden="true"></i> TubeRead</a>
+  <span class="mast-label">量筒读数台</span>
+  <a class="external" href="/prepare">照片准备 ↗</a>
+</header>
+<main>
+  <section class="introduction">
+    <div><h1>量筒液位读数</h1><p>在平视原片上用两处实际刻度确定体积，保留读数和原片依据。</p></div>
+    <div class="top-actions">
+      <button id="practice" class="primary" type="button">打开练习量筒</button>
+      <button id="open-import" type="button">导入原片</button>
+    </div>
+  </section>
+  <p id="notice" class="notice" role="status" hidden></p>
+  <section class="library">
+    <label for="library">读数卡</label>
+    <select id="library"><option value="">选取已存卡片</option></select>
+    <span id="origin"></span>
+  </section>
+  <section id="empty" class="empty">
+    <div class="empty-tube" aria-hidden="true"><i></i></div>
+    <h2>选择一张量筒照片</h2>
+    <p>使用平视、正放的量筒照片，在两条已知刻度之间读凹液面。</p>
+  </section>
+  <section id="workspace" class="workspace" hidden>
+    <div class="left">
+      <section class="panel source">
+        <div class="panel-head">
+          <div><h2 id="card-title">原片</h2><span id="dimensions"></span></div>
+          <div class="modes" role="group" aria-label="原片液位模式">
+            <button id="probe-mode" data-mode="probe" aria-pressed="true" type="button">点读</button>
+            <button id="mark-mode" data-mode="mark" aria-pressed="false" type="button">取液位</button>
+          </div>
+        </div>
+        <div class="camera"><canvas id="capture" aria-label="量筒原片，可点击取样或输入原片像素坐标"></canvas></div>
+        <div class="probe">
+          <b>原片点读</b>
+          <form id="probe-form"><label>X <input id="probe-x" type="number" min="0" step="1" required></label>
+            <label>Y <input id="probe-y" type="number" min="0" step="1" required></label>
+            <button type="submit">读取</button></form>
+          <span id="probe-result">选择原片像素</span>
+        </div>
+      </section>
+      <section class="panel profile">
+        <div class="panel-head"><div><h2>液位所在行</h2><span>实测亮度 · 原片像素 X</span></div><span class="legend"><i></i> 量筒范围</span></div>
+        <canvas id="chart" width="850" height="155" aria-label="选中行的实际亮度剖面"></canvas>
+      </section>
+    </div>
+    <aside class="right">
+      <section class="panel readout">
+        <div class="panel-head"><h2>当前体积</h2><span id="measurement-state"></span></div>
+        <div class="volume"><strong id="volume">—</strong><span id="volume-detail"></span></div>
+        <p id="selected-level"></p>
+      </section>
+      <form id="calibration" class="panel settings">
+        <div class="panel-head"><div><h2>刻度与液位</h2><span>Y 从原片顶部向下增加</span></div></div>
+        <label class="wide">卡片名称<input id="name" maxlength="80" required></label>
+        <fieldset><legend>原片坐标 · px</legend><div class="form-grid">
+          <label>左壁 X<input data-setting="left" type="number" step="1" min="0" required></label>
+          <label>右壁 X<input data-setting="right" type="number" step="1" min="0" required></label>
+          <label>液面 Y<input data-setting="level" type="number" step="1" min="0" required></label>
+          <label>上刻度 Y<input data-setting="upper" type="number" step="1" min="0" required></label>
+          <label>下刻度 Y<input data-setting="lower" type="number" step="1" min="0" required></label>
+        </div></fieldset>
+        <fieldset><legend>参考体积 · mL</legend><div class="form-grid">
+          <label>上刻度<input data-setting="high_ml" type="number" step="any" min="0" required></label>
+          <label>下刻度<input data-setting="low_ml" type="number" step="any" min="0" required></label>
+        </div></fieldset>
+        <button id="save" class="primary" type="submit">保存并重读</button>
+      </form>
+      <section class="panel outputs">
+        <div class="panel-head"><h2>读数交接</h2></div>
+        <div><a id="proof" download>PNG 校样 ↓</a><a id="csv" download>CSV 读数 ↓</a><a id="zip" download>ZIP 读数卡 ↓</a></div>
+        <button id="prepare" type="button">将原片送入照片准备 ↗</button>
+      </section>
+    </aside>
+  </section>
+</main>
+<dialog id="import">
+  <form id="upload">
+    <h2>导入量筒原片</h2>
+    <label>读数卡名称<input name="name" maxlength="80" required></label>
+    <label>照片<input name="photo" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/tiff" required></label>
+    <p id="import-notice" role="status"></p>
+    <div class="top-actions"><button id="cancel-import" type="button">取消</button><button class="primary" type="submit">建立读数卡</button></div>
+  </form>
+</dialog>
+</body>
+</html>
