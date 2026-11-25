@@ -1,7 +1,8 @@
 "use strict";
 
 const get = (id) => document.getElementById(id);
-const state = {card: null, result: null, photo: null, probe: null, mode: "probe", busy: false};
+const state = {card: null, result: null, photo: null, probe: null, mode: "probe", busy: false,
+  detection: null, pendingGraduations: null};
 const settings = [...document.querySelectorAll("[data-setting]")];
 
 async function api(path, options) {
@@ -57,11 +58,31 @@ function paintSource() {
   canvas.height = card.height;
   ctx.drawImage(photo, 0, 0);
   const cfg = card.settings;
+  const scaleInfo = state.result.scale || {};
+  const anchors = scaleInfo.anchors || [
+    {y: cfg.upper, ml: cfg.high_ml, kind: "reference"},
+    {y: cfg.lower, ml: cfg.low_ml, kind: "reference"},
+  ];
+  const used = scaleInfo.used || null;
+  const usedYs = new Set(used ? [used.top.y, used.bottom.y] : []);
   ctx.lineWidth = Math.max(1, card.width / 550);
   ctx.strokeStyle = "#28727c";
   ctx.setLineDash([6, 4]);
   ctx.strokeRect(cfg.left, cfg.upper, cfg.right - cfg.left, cfg.lower - cfg.upper);
   ctx.setLineDash([]);
+  if (used) {
+    ctx.fillStyle = "rgba(37, 169, 178, 0.13)";
+    ctx.fillRect(cfg.left, used.top.y, cfg.right - cfg.left, used.bottom.y - used.top.y);
+  }
+  for (const anchor of anchors) {
+    const isUsed = usedYs.has(anchor.y);
+    ctx.strokeStyle = isUsed ? "#0b7285" : (anchor.kind === "reference" ? "#25686d" : "#3d8b7d");
+    ctx.lineWidth = isUsed ? Math.max(3, card.width / 190) : Math.max(1.5, card.width / 420);
+    ctx.beginPath();
+    ctx.moveTo(cfg.left, anchor.y + 0.5);
+    ctx.lineTo(cfg.right, anchor.y + 0.5);
+    ctx.stroke();
+  }
   const drawn = state.result.reading;
   ctx.strokeStyle = "#ac5317";
   ctx.lineWidth = 2;
@@ -123,7 +144,74 @@ function paintChart() {
 
 function pointLabel(point) {
   const value = point.volume_ml === null ? "参考外" : point.volume_ml.toFixed(2) + " mL";
-  return "(" + point.x + ", " + point.y + ") · " + point.brightness.toFixed(1) + " · " + value;
+  const used = point.scale?.used;
+  const pair = used ? ` · 实线 Y${used.top.y}/${used.bottom.y}` : "";
+  return "(" + point.x + ", " + point.y + ") · " + point.brightness.toFixed(1) + " · " + value + pair;
+}
+
+function readFormSettings() {
+  return Object.fromEntries(settings.map((field) => {
+    if (field.dataset.setting === "scale_mode") return [field.dataset.setting, field.value || "two_point"];
+    if (field.dataset.setting === "step_ml" && field.value.trim() === "") {
+      return [field.dataset.setting, null];
+    }
+    return [field.dataset.setting, Number(field.value)];
+  }));
+}
+
+function syncScaleModeButtons() {
+  const input = settings.find((field) => field.dataset.setting === "scale_mode");
+  const mode = input?.value || "two_point";
+  document.querySelectorAll("[data-scale-mode]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.scaleMode === mode));
+  });
+}
+
+function renderGraduationSlots(slots, info = null) {
+  const host = get("graduation-slots");
+  const summary = get("graduation-summary");
+  host.replaceChildren();
+  if (!Array.isArray(slots) || !slots.length) {
+    summary.textContent = info?.warning || "填好每档毫升数后识别；未采用时仍按两端均分。";
+    const empty = document.createElement("span");
+    empty.className = "slot-empty";
+    empty.textContent = "暂无中间档";
+    host.append(empty);
+    return;
+  }
+  const found = slots.filter((slot) => slot.y !== null && slot.y !== undefined).length;
+  if (info?.adoptable === false) {
+    summary.textContent = info.warning || `只找到 ${found} 条，至少两条才采用。`;
+  } else if (info?.adoptable || (info?.mode === "graduations" && info?.adopted)) {
+    summary.textContent = `已一对一保留 ${found} 条实拍实线；空档显示“留空”。`;
+  } else {
+    summary.textContent = `已保存 ${found} 条实线；至少两条后启用局部估读。`;
+  }
+  for (const slot of slots) {
+    const chip = document.createElement("span");
+    const adopted = slot.y !== null && slot.y !== undefined;
+    chip.className = "graduation-slot " + (adopted ? "found" : "blank");
+    chip.dataset.slot = slot.slot;
+    chip.dataset.adopted = String(adopted);
+    if (adopted) chip.dataset.y = slot.y;
+    chip.title = `第 ${slot.slot} 档 · ${slot.ml} mL` +
+      (slot.expected_y ? ` · 粗分 Y${slot.expected_y}` : "") +
+      (adopted ? ` · 实拍 Y${slot.y}` : " · 留空");
+    const head = document.createElement("b");
+    head.textContent = `${slot.slot}档 ${Number(slot.ml).toFixed(Number(slot.ml) % 1 ? 1 : 0)}mL`;
+    const row = document.createElement("i");
+    row.textContent = adopted ? `Y${slot.y}` : "留空";
+    chip.append(head, row);
+    host.append(chip);
+  }
+}
+
+function usedPairText(result) {
+  const used = result.scale?.used;
+  if (!used) return result.reading.volume_ml === null ? "两端已知刻度之外，不外推" : "两端两点标定";
+  const gap = used.bottom.slot - used.top.slot - 1;
+  const skipped = gap > 0 ? ` · 跨过 ${gap} 个未认档` : "";
+  return `依据实线 Y${used.top.y}（${used.top.ml} mL）→ Y${used.bottom.y}（${used.bottom.ml} mL）${skipped}`;
 }
 
 function show() {
@@ -134,17 +222,27 @@ function show() {
   get("card-title").textContent = card.name;
   get("dimensions").textContent = card.width + " × " + card.height + " px · " + card.photo_name;
   get("name").value = card.name;
-  for (const field of settings) field.value = card.settings[field.dataset.setting];
+  for (const field of settings) {
+    const value = card.settings[field.dataset.setting];
+    field.value = value === null || value === undefined ? "" : value;
+  }
+  const modeInput = settings.find((field) => field.dataset.setting === "scale_mode");
+  if (!modeInput.value) modeInput.value = "two_point";
+  syncScaleModeButtons();
   get("probe-x").max = card.width - 1;
   get("probe-y").max = card.height - 1;
   get("probe-x").value = state.probe?.x ?? result.reading.x;
   get("probe-y").value = state.probe?.y ?? result.reading.y;
   get("probe-result").textContent = state.probe ? pointLabel(state.probe) : "选择原片像素";
   const volume = result.reading.volume_ml;
+  const usingLines = result.scale?.mode === "graduations" && result.scale?.adopted;
   get("volume").textContent = volume === null ? "—" : volume.toFixed(2);
-  get("volume-detail").textContent = volume === null ? "参考刻度外" : "mL";
-  get("measurement-state").textContent = volume === null ? "超出范围" : "两点标定";
-  get("selected-level").textContent = "原片液面 Y " + result.reading.y + " · " + result.ml_per_px.toFixed(3) + " mL/px";
+  get("volume-detail").textContent = volume === null ? "参考刻度外" : (usingLines ? "mL · 局部实线" : "mL");
+  get("measurement-state").textContent = volume === null ? "超出范围" : (usingLines ? "实拍刻线夹读" : "两点标定");
+  const slope = result.scale?.ml_per_px ?? result.ml_per_px;
+  get("selected-level").textContent = "原片液面 Y " + result.reading.y + " · " +
+    slope.toFixed(3) + " mL/px · " + usedPairText(result);
+  renderGraduationSlots(card.settings.graduations || [], result.scale);
   for (const [id, filename] of Object.entries({proof: "proof.png", csv: "profile.csv", zip: "observation.zip"})) {
     get(id).href = "/tuberead" + route("/export/" + filename) + savedQuery();
   }
@@ -157,7 +255,7 @@ async function open(card) {
   const photo = new Image();
   photo.src = "/tuberead" + base + "/capture.png";
   const [result] = await Promise.all([api(base + "/measurement?revision=" + card.revision), photo.decode()]);
-  Object.assign(state, {card, result, photo, probe: null});
+  Object.assign(state, {card, result, photo, probe: null, detection: null, pendingGraduations: null});
   get("library").value = card.id;
   show();
 }
@@ -198,6 +296,16 @@ document.querySelectorAll("[data-mode]").forEach((button) => button.addEventList
   document.querySelectorAll("[data-mode]").forEach((item) =>
     item.setAttribute("aria-pressed", String(item === button)));
 }));
+document.querySelectorAll("[data-scale-mode]").forEach((button) => button.addEventListener("click", () => {
+  const input = settings.find((field) => field.dataset.setting === "scale_mode");
+  input.value = button.dataset.scaleMode;
+  syncScaleModeButtons();
+  if (input.value === "two_point") {
+    notice("已切回原两点读法；点击“保存并重读”后点读和校样使用两端实线。");
+  } else {
+    notice("将使用已保存的实拍实线；若改过坐标或每档毫升数，请重新识别。");
+  }
+}));
 get("capture").addEventListener("click", (event) => {
   if (!state.card) return;
   const canvas = event.currentTarget;
@@ -216,17 +324,46 @@ get("probe-form").addEventListener("submit", (event) => {
   event.preventDefault();
   action(() => probe(get("probe-x").value, get("probe-y").value));
 });
+async function saveCalibration(extraSettings = {}) {
+  const settingsPayload = {...readFormSettings(), ...extraSettings};
+  if (!Object.prototype.hasOwnProperty.call(extraSettings, "graduations")) {
+    settingsPayload.graduations = state.pendingGraduations || state.card.settings.graduations || [];
+  }
+  const card = await api(route(""), {
+    method: "PATCH", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({revision: state.card.revision, name: get("name").value,
+      settings: settingsPayload}),
+  });
+  state.pendingGraduations = null;
+  await open(card);
+  await library();
+}
+
+get("detect-lines").addEventListener("click", () => action(async () => {
+  const formSettings = readFormSettings();
+  if (!formSettings.step_ml || formSettings.step_ml <= 0) {
+    notice("请先填写相邻短刻线一档是多少 mL。");
+    return;
+  }
+  const detection = await api(route("/detect") + savedQuery(), {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({revision: state.card.revision, settings: formSettings}),
+  });
+  state.detection = detection;
+  state.pendingGraduations = detection.lines;
+  renderGraduationSlots(detection.slots, detection);
+  if (!detection.adoptable) {
+    notice(detection.warning || "至少找到两条中间刻线才可采用。");
+    return;
+  }
+  settings.find((field) => field.dataset.setting === "scale_mode").value = "graduations";
+  syncScaleModeButtons();
+  await saveCalibration({graduations: detection.lines, scale_mode: "graduations"});
+  notice(`已识别并保存 ${detection.found} 条中间实线；点读、重开和校样使用同一 Y 坐标。`);
+}));
 get("calibration").addEventListener("submit", (event) => {
   event.preventDefault();
-  action(async () => {
-    const fields = Object.fromEntries(settings.map((field) => [field.dataset.setting, Number(field.value)]));
-    const card = await api(route(""), {
-      method: "PATCH", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({revision: state.card.revision, name: get("name").value, settings: fields}),
-    });
-    await open(card);
-    await library();
-  });
+  action(() => saveCalibration());
 });
 get("prepare").addEventListener("click", () => action(async () => {
   const {url} = await api(route("/prepare") + savedQuery(), {method: "POST"});

@@ -65,6 +65,22 @@ h2 { font-size: 15px; font-weight: 700; }
 .settings input, dialog input { width: 100%; min-width: 0; padding: 5px 7px; min-height: 33px; }
 .settings fieldset { padding: 8px 0 0; border: 0; border-top: 1px solid var(--line); }
 .form-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.scale-switch { grid-column: span 2; display: flex; gap: 6px; align-items: stretch; }
+.scale-mode-button { flex: 1; min-height: 33px; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
+.scale-mode-button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: #d9edf0; font-weight: 700; }
+.graduation-box { display: grid; gap: 8px; }
+.graduation-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.graduation-actions button { min-height: 31px; padding: 4px 10px; font-size: 12px; }
+#graduation-summary { color: var(--muted); font-size: 12px; }
+.slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(67px, 1fr)); gap: 5px; max-height: 132px; overflow: auto; padding-right: 2px; }
+.graduation-slot { display: grid; gap: 2px; border: 1px solid var(--line); border-radius: 4px; padding: 4px 5px; background: #f5fafb; min-width: 0; }
+.graduation-slot b { font-size: 11px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.graduation-slot i { font-style: normal; font-size: 11px; color: var(--ink, #182938); font-variant-numeric: tabular-nums; }
+.graduation-slot.found { border-color: #79b7b4; background: #e7f4f2; }
+.graduation-slot.blank { opacity: .68; background: #f4f6f7; }
+.slot-empty { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.hint { color: var(--muted); font-size: 11px; line-height: 1.45; }
+#selected-level { line-height: 1.55; }
 .settings > button { width: calc(100% - 30px); }
 .outputs > div:nth-child(2) { display: flex; flex-wrap: wrap; gap: 8px 13px; font-size: 12px; color: var(--accent); }
 .outputs > button { font-size: 12px; }

@@ -66,16 +66,36 @@
         <div class="panel-head"><div><h2>刻度与液位</h2><span>Y 从原片顶部向下增加</span></div></div>
         <label class="wide">卡片名称<input id="name" maxlength="80" required></label>
         <fieldset><legend>原片坐标 · px</legend><div class="form-grid">
-          <label>左壁 X<input data-setting="left" type="number" step="1" min="0" required></label>
-          <label>右壁 X<input data-setting="right" type="number" step="1" min="0" required></label>
-          <label>液面 Y<input data-setting="level" type="number" step="1" min="0" required></label>
-          <label>上刻度 Y<input data-setting="upper" type="number" step="1" min="0" required></label>
-          <label>下刻度 Y<input data-setting="lower" type="number" step="1" min="0" required></label>
+          <label>左壁 X<input id="left" name="left" data-setting="left" type="number" step="1" min="0" required></label>
+          <label>右壁 X<input id="right" name="right" data-setting="right" type="number" step="1" min="0" required></label>
+          <label>液面 Y<input id="level" name="level" data-setting="level" type="number" step="1" min="0" required></label>
+          <label>上刻度 Y<input id="upper" name="upper" data-setting="upper" type="number" step="1" min="0" required></label>
+          <label>下刻度 Y<input id="lower" name="lower" data-setting="lower" type="number" step="1" min="0" required></label>
         </div></fieldset>
         <fieldset><legend>参考体积 · mL</legend><div class="form-grid">
-          <label>上刻度<input data-setting="high_ml" type="number" step="any" min="0" required></label>
-          <label>下刻度<input data-setting="low_ml" type="number" step="any" min="0" required></label>
+          <label>上刻度<input id="high_ml" name="high_ml" data-setting="high_ml" type="number" step="any" min="0" required></label>
+          <label>下刻度<input id="low_ml" name="low_ml" data-setting="low_ml" type="number" step="any" min="0" required></label>
+          <label for="step_ml">每档 mL（相邻短刻线）<input id="step_ml" name="step_ml" data-setting="step_ml" type="number" step="any" min="0" placeholder="如 5"></label>
+          <label for="scale_mode">刻度读法
+            <select id="scale_mode" name="scale_mode" data-setting="scale_mode">
+              <option value="two_point">原两点均分</option>
+              <option value="graduations">实拍刻线夹读</option>
+            </select>
+          </label>
+          <div class="scale-switch" role="group" aria-label="刻度读法切换">
+            <button id="mode-two-point" class="scale-mode-button" data-scale-mode="two_point" type="button" aria-pressed="true">切回原两点读法</button>
+            <button id="mode-graduations" class="scale-mode-button" data-scale-mode="graduations" type="button" aria-pressed="false">采用实拍刻线</button>
+          </div>
         </div></fieldset>
+        <fieldset class="graduation-box">
+          <legend>右壁实拍短刻线</legend>
+          <div class="graduation-actions">
+            <button id="detect-lines" class="secondary" type="button">识别中间刻线并采用实线</button>
+            <span id="graduation-summary">填好每档毫升数后识别</span>
+          </div>
+          <div id="graduation-slots" class="slot-grid" aria-live="polite"></div>
+          <p class="hint">只搜右壁两侧各一成筒内宽的横笔；每档在粗分位置上下 3/4 格距内匹配。至少认出两条中间线才采用，未认到的档留空。</p>
+        </fieldset>
         <button id="save" class="primary" type="submit">保存并重读</button>
       </form>
       <section class="panel outputs">

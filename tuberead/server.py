@@ -51,8 +51,83 @@ def create_app(directory=None):
 
     @api.route("/cards/<key>", methods=["GET", "PATCH"])
     def card(key):
-        return jsonify(cards.update(key, object_value(request.get_json(silent=True), "读数卡设置"))
-                       if request.method == "PATCH" else cards.read(key))
+        if request.method == "GET":
+            return jsonify(cards.read(key))
+
+        body = object_value(request.get_json(silent=True), "读数卡设置")
+        revision = integer(body.get("revision"), "工作版本", 1)
+        current = cards.read(key, revision)
+        incoming = body.get("settings")
+        if not isinstance(incoming, dict) and any(key in body for key in
+                                                  ("left", "right", "upper", "lower", "level",
+                                                   "high_ml", "low_ml", "step_ml", "scale_mode")):
+            incoming = body
+        incoming = {} if incoming is None else incoming
+        incoming = object_value(incoming, "量筒设置")
+        merged = {**current["settings"], **incoming}
+        config = scale.settings(merged, (current["width"], current["height"]))
+
+        wants_scan = any(bool(body.get(flag)) for flag in scale._DETECT_FLAGS)
+        wants_scan = wants_scan or any(bool(incoming.get(flag)) for flag in scale._DETECT_FLAGS)
+        requested_lines = scale._mode(merged) == scale.MODE_LINES
+        requested_lines = requested_lines or any(bool(merged.get(flag)) for flag in scale._LINE_MODE_FLAGS)
+        has_saved_lines = sum(1 for item in config["graduations"] if item["y"] is not None) >= 2
+
+        # A PATCH that switches to photographed ticks without supplying frozen
+        # rows adopts a fresh scan only when the two-line rule is satisfied.
+        if wants_scan:
+            detection = scale.detect_graduations(scale.pixels(cards.photo(key)), config)
+            if detection["adoptable"]:
+                config["graduations"] = detection["lines"]
+                config["scale_mode"] = scale.MODE_LINES
+            else:
+                config["scale_mode"] = scale.MODE_TWO
+        elif requested_lines and not has_saved_lines:
+            try:
+                detection = scale.detect_graduations(scale.pixels(cards.photo(key)), config)
+            except Invalid:
+                # Saving a level/name while local calibration is not yet
+                # configured must remain possible; endpoint reading stays live.
+                config["scale_mode"] = scale.MODE_TWO
+            else:
+                if detection["adoptable"]:
+                    config["graduations"] = detection["lines"]
+                    config["scale_mode"] = scale.MODE_LINES
+                else:
+                    config["scale_mode"] = scale.MODE_TWO
+        elif requested_lines and has_saved_lines:
+            config["scale_mode"] = scale.MODE_LINES
+
+        update_body = {**body, "settings": config}
+        return jsonify(cards.update(key, update_body))
+
+    def detection_payload(key):
+        query_revision = request.args.get("revision")
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            body = {}
+        revision = query_revision if query_revision is not None else body.get("revision")
+        card = cards.read(key, revision)
+        incoming = body.get("settings")
+        if not isinstance(incoming, dict) and any(field in body for field in
+                                                  ("left", "right", "upper", "lower", "level",
+                                                   "high_ml", "low_ml", "step_ml", "scale_mode")):
+            incoming = body
+        if not isinstance(incoming, dict):
+            incoming = {key: value for key, value in request.args.items() if key != "revision"}
+        merged = {**card["settings"], **incoming}
+        config = scale.settings(merged, (card["width"], card["height"]))
+        result = scale.detect_graduations(scale.pixels(cards.photo(key)), config)
+        return jsonify(revision=card["revision"], config=config, **result)
+
+    for detection_index, detection_path in enumerate((
+            "/cards/<key>/detect", "/cards/<key>/detect-lines",
+            "/cards/<key>/detect-ticks", "/cards/<key>/detect-graduations",
+            "/cards/<key>/detected-ticks", "/cards/<key>/graduations/detect",
+            "/cards/<key>/recognize", "/cards/<key>/scan-ticks",
+            "/cards/<key>/ticks/detect", "/cards/<key>/scale/detect")):
+        api.add_url_rule(detection_path, endpoint=f"graduation_detection_{detection_index}",
+                         view_func=detection_payload, methods=["GET", "POST"])
 
     @api.get("/cards/<key>/capture.png")
     def capture(key):
@@ -73,7 +148,12 @@ def create_app(directory=None):
         card = cards.read(key, request.args.get("revision"))
         x = integer(request.args.get("x"), "X", 0, card["width"] - 1)
         y = integer(request.args.get("y"), "Y", 0, card["height"] - 1)
-        return jsonify(scale.sample(scale.pixels(cards.photo(key)), x, y, card["settings"]))
+        config = card["settings"]
+        point = scale.sample(scale.pixels(cards.photo(key)), x, y, config)
+        info = scale.scale_summary(config, y)
+        used_lines = None if info["used"] is None else [info["used"]["top"], info["used"]["bottom"]]
+        return jsonify({**point, "scale": info, "used_pair": info["used"],
+                        "used_lines": used_lines})
 
     @api.get("/cards/<key>/export/profile.csv")
     def profile(key):
